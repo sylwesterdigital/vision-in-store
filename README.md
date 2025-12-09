@@ -1,5 +1,11 @@
 # vision-in-store
 
+
+
+https://github.com/user-attachments/assets/a55442e2-d3c4-4f2d-9214-39ee44d1b39b
+
+
+
 Early proof of concept for a smart retail camera pipeline using Python, OpenCV, TorchVision and Flask.
 
 ## Features
