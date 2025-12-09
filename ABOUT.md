@@ -1,5 +1,5 @@
 # vision-in-store
 
-Proof-of-concept computer vision pipeline for instrumenting a retail space.
+Early proof-of-concept smart retail camera pipeline using Python, OpenCV, TorchVision and Flask.
 
-The goal is to detect people and basket-like objects from a live camera or recorded video feed, and to expose a clean interface that can be extended with age/sex estimation and product-level analytics (gaze, pick-up events, shelf occupancy).
+The app takes a live camera, video file or single frame, runs a Faster R-CNN detector (COCO), and gives an interactive web UI with object filters, trajectory visualisation, and heatmap-style “dwell” overlays. It’s designed as a playground for people / basket / product analytics (gaze, pick-ups, shelf occupancy, etc.).

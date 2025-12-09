@@ -383,7 +383,7 @@
         </div>
 
         <div class="video-shell" id="video-shell">
-          <video id="preview" autoplay muted playsinline></video>
+          <video id="preview" autoplay muted playsinline controls></video>
           <img id="still" alt="Still frame" style="display:none;">
         </div>
 
@@ -405,7 +405,7 @@
             <span class="stat-value" id="people-count">0</span>
           </div>
           <div class="stat">
-            <span class="stat-label">Tracked persons</span>
+            <span class="stat-label">Tracked objects</span>
             <span class="stat-value" id="tracked-count">0</span>
           </div>
           <div class="stat">
@@ -433,8 +433,37 @@
             <input type="range" id="score-threshold" min="0.1" max="0.9" step="0.05" value="0.6">
           </div>
           <div class="settings-row">
+            <span>Show boxes</span>
+            <input type="checkbox" id="show-boxes" checked>
+          </div>
+          <div class="settings-row">
             <span>Show trajectories</span>
             <input type="checkbox" id="show-trajectories" checked>
+          </div>
+          <div class="settings-row">
+            <span>Show heatmap</span>
+            <input type="checkbox" id="show-heatmap">
+          </div>
+          <div class="settings-row">
+            <span>Analysis FPS</span>
+            <input type="range" id="analysis-fps" min="0.2" max="3" step="0.2" value="1">
+          </div>
+          <div class="settings-row">
+            <span>Video speed</span>
+            <input type="range" id="video-speed" min="0.25" max="2" step="0.25" value="1">
+          </div>
+          <div class="settings-row" style="flex-direction:column;align-items:flex-start;">
+            <span>Object filters</span>
+            <div style="display:flex;gap:0.3rem;margin-top:0.3rem;width:100%;">
+              <input
+              id="object-filter-input"
+              type="text"
+              placeholder="person, phone, bottle…"
+              style="flex:1;min-width:0;font-size:0.75rem;padding:0.15rem 0.4rem;border-radius:999px;border:1px solid rgba(148,163,184,0.5);background:rgba(15,23,42,0.8);color:var(--text-main);"
+              >
+              <button type="button" id="object-filter-add" class="primary-button is-secondary">+ add</button>
+            </div>
+            <div id="object-filter-chips" style="margin-top:0.35rem;display:flex;flex-wrap:wrap;gap:0.25rem;"></div>
           </div>
         </div>
 
@@ -447,7 +476,8 @@
     </div>
   </main>
   <footer>
-    Camera mode requires opening this app as <code>http://localhost:5000</code> (or https), not a raw LAN IP.
+    Camera mode requires a secure context (https) or <code>localhost</code>.
+    Current build also works over self-signed https on your IP.
   </footer>
 
   <script>
@@ -484,6 +514,14 @@
 
       const scoreThresholdInput = document.getElementById("score-threshold");
       const showTrajInput = document.getElementById("show-trajectories");
+      const showBoxesInput = document.getElementById("show-boxes");
+      const showHeatmapInput = document.getElementById("show-heatmap");
+      const analysisFpsInput = document.getElementById("analysis-fps");
+      const videoSpeedInput = document.getElementById("video-speed");
+
+      const objectFilterInput = document.getElementById("object-filter-input");
+      const objectFilterAddBtn = document.getElementById("object-filter-add");
+      const objectFilterChips = document.getElementById("object-filter-chips");
 
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
@@ -496,16 +534,28 @@
       overlayCanvas.style.top = "0";
       videoShell.appendChild(overlayCanvas);
 
+      const TRACK_HISTORY = 40;
+
       let currentMode = "camera";
       let mediaStream = null;
       let analyzeInterval = null;
       let analyzing = false;
       let requestInFlight = false;
+      let currentSessionId = null;
+
+      // Active object filters (sent to backend as comma-separated list)
+      let activeClasses = ["person"];
 
       const settings = {
         scoreThreshold: parseFloat(scoreThresholdInput.value) || 0.6,
+        showBoxes: showBoxesInput.checked,
         showTrajectories: showTrajInput.checked,
+        showHeatmap: showHeatmapInput.checked,
+        analysisFps: parseFloat(analysisFpsInput.value) || 1,
+        videoSpeed: parseFloat(videoSpeedInput.value) || 1,
       };
+
+      preview.playbackRate = settings.videoSpeed;
 
       // Client-side logging helper: logs to console, on-screen panel, and backend /client_event
       function logClient(event, level, message, extra) {
@@ -524,7 +574,7 @@
         line.className = "debug-entry";
         line.textContent = ts + " • " + event + " • " + message;
         debugLogEl.prepend(line);
-        while (debugLogEl.childElementCount > 20) {
+        while (debugLogEl.childElementCount > 40) {
           debugLogEl.lastElementChild.remove();
         }
 
@@ -572,8 +622,15 @@
         if (analyzeInterval !== null) {
           return;
         }
-        analyzeInterval = setInterval(captureAndAnalyze, 1000);
-        logClient("analysis_timer_start", "DEBUG", "Started analysis timer @1fps", {});
+        const fps = settings.analysisFps > 0 ? settings.analysisFps : 1;
+        const intervalMs = 1000 / fps;
+        analyzeInterval = setInterval(captureAndAnalyze, intervalMs);
+        logClient(
+          "analysis_timer_start",
+          "DEBUG",
+          "Started analysis timer @" + fps.toFixed(2) + "fps",
+          { fps }
+          );
       }
 
       function getActiveVisualElement() {
@@ -613,6 +670,18 @@
         addHistoryEntry(summary);
       }
 
+      function heatColor(heat) {
+        // heat in [0,1] → interpolate green (#22c55e) to red (#ef4444)
+        const clamp = (v, mn, mx) => Math.max(mn, Math.min(mx, v));
+        const t = clamp(heat, 0, 1);
+        const g = { r: 34, g: 197, b: 94 };
+        const r = { r: 239, g: 68, b: 68 };
+        const rr = Math.round(g.r + (r.r - g.r) * t);
+        const gg = Math.round(g.g + (r.g - g.g) * t);
+        const bb = Math.round(g.b + (r.b - g.b) * t);
+        return { r: rr, g: gg, b: bb };
+      }
+
       function renderDetectionsOverlay(detections, tracks) {
         const visual = getActiveVisualElement();
         if (!visual) return;
@@ -637,48 +706,107 @@
         const scaleX = cw / vw;
         const scaleY = ch / vh;
 
-        overlayCtx.lineWidth = 2;
-        overlayCtx.font = "12px system-ui, -apple-system, sans-serif";
-        overlayCtx.textBaseline = "bottom";
+        // Boxes
+        if (settings.showBoxes && Array.isArray(detections)) {
+          overlayCtx.save();
+          overlayCtx.lineWidth = 2;
+          overlayCtx.font = "12px system-ui, -apple-system, sans-serif";
+          overlayCtx.textBaseline = "bottom";
 
-        (detections || []).forEach((d) => {
-          const x = (d.x || 0) * scaleX;
-          const y = (d.y || 0) * scaleY;
-          const w = (d.w || 0) * scaleX;
-          const h = (d.h || 0) * scaleY;
+          detections.forEach((d) => {
+            const x = (d.x || 0) * scaleX;
+            const y = (d.y || 0) * scaleY;
+            const w = (d.w || 0) * scaleX;
+            const h = (d.h || 0) * scaleY;
 
-          overlayCtx.strokeStyle = "#22c55e";
-          overlayCtx.strokeRect(x, y, w, h);
+            overlayCtx.strokeStyle = "#22c55e";
+            overlayCtx.strokeRect(x, y, w, h);
 
-          const label = (d.label || "person") + (d.track_id ? " #" + d.track_id : "");
-          const tw = overlayCtx.measureText(label).width + 6;
-          const th = 14;
-          const boxY = y - th < 0 ? y + th : y;
+            const label =
+            (d.label || "object") + (d.track_id ? " #" + d.track_id : "");
+            const tw = overlayCtx.measureText(label).width + 6;
+            const th = 14;
+            const boxY = y - th < 0 ? y + th : y;
 
-          overlayCtx.fillStyle = "rgba(15,23,42,0.85)";
-          overlayCtx.fillRect(x, boxY - th, tw, th);
-          overlayCtx.fillStyle = "#e5e7eb";
-          overlayCtx.fillText(label, x + 3, boxY - 2);
-        });
+            overlayCtx.fillStyle = "rgba(15,23,42,0.85)";
+            overlayCtx.fillRect(x, boxY - th, tw, th);
+            overlayCtx.fillStyle = "#e5e7eb";
+            overlayCtx.fillText(label, x + 3, boxY - 2);
+          });
+          overlayCtx.restore();
+        }
 
+        // Trajectories (Bezier-smoothed)
         if (settings.showTrajectories && Array.isArray(tracks) && tracks.length > 0) {
+          overlayCtx.save();
           overlayCtx.lineWidth = 1.5;
+          overlayCtx.strokeStyle = "rgba(56, 189, 248, 0.9)";
           tracks.forEach((t) => {
             const pts = t.points || [];
             if (pts.length < 2) return;
+
             overlayCtx.beginPath();
+            let p0 = pts[0];
+            let x0 = p0.x * scaleX;
+            let y0 = p0.y * scaleY;
+            overlayCtx.moveTo(x0, y0);
+
+            if (pts.length === 2) {
+              const p1 = pts[1];
+              overlayCtx.lineTo(p1.x * scaleX, p1.y * scaleY);
+            } else {
+              for (let i = 1; i < pts.length - 1; i++) {
+                const p = pts[i];
+                const n = pts[i + 1];
+                const cx = p.x * scaleX;
+                const cy = p.y * scaleY;
+                const nx = n.x * scaleX;
+                const ny = n.y * scaleY;
+                const mx = (cx + nx) / 2;
+                const my = (cy + ny) / 2;
+                overlayCtx.quadraticCurveTo(cx, cy, mx, my);
+              }
+              const last = pts[pts.length - 1];
+              overlayCtx.lineTo(last.x * scaleX, last.y * scaleY);
+            }
+
+            overlayCtx.stroke();
+          });
+          overlayCtx.restore();
+        }
+
+        // Heatmap circles (radial gradient, accumulates over time)
+        if (settings.showHeatmap && Array.isArray(tracks) && tracks.length > 0) {
+          overlayCtx.save();
+          tracks.forEach((t) => {
+            const pts = t.points || [];
+            if (!pts.length) return;
+            const radiusBase = (t.radius || 40) * (scaleX + scaleY) / 2;
+            const ageFactor = Math.min(1, pts.length / TRACK_HISTORY);
+
             pts.forEach((p, idx) => {
               const px = p.x * scaleX;
               const py = p.y * scaleY;
-              if (idx === 0) {
-                overlayCtx.moveTo(px, py);
-              } else {
-                overlayCtx.lineTo(px, py);
-              }
+              const localFactor = (idx + 1) / pts.length;
+              const heat = 0.3 * localFactor + 0.7 * ageFactor; // more time → hotter
+              const rBase = radiusBase * (0.6 + 0.7 * heat);
+
+              const c = heatColor(heat);
+              const grad = overlayCtx.createRadialGradient(
+                px, py, 0,
+                px, py, rBase
+                );
+              grad.addColorStop(0.0, `rgba(${c.r},${c.g},${c.b},0.5)`);
+              grad.addColorStop(0.4, `rgba(${c.r},${c.g},${c.b},0.35)`);
+              grad.addColorStop(1.0, `rgba(${c.r},${c.g},${c.b},0.0)`);
+
+              overlayCtx.fillStyle = grad;
+              overlayCtx.beginPath();
+              overlayCtx.arc(px, py, rBase, 0, Math.PI * 2);
+              overlayCtx.fill();
             });
-            overlayCtx.strokeStyle = "rgba(56, 189, 248, 0.9)";
-            overlayCtx.stroke();
           });
+          overlayCtx.restore();
         }
       }
 
@@ -688,11 +816,71 @@
         item.className = "history-item";
         const people = summary.people_count ?? 0;
         const tracks = Array.isArray(summary.tracks) ? summary.tracks.length : 0;
-        item.textContent = ts + " • people: " + people + " • tracks: " + tracks;
+        const sid = summary.session_id || "default";
+        item.textContent =
+        ts + " • sess=" + sid + " • people: " + people + " • tracks: " + tracks;
         historyList.prepend(item);
-        while (historyList.childElementCount > 20) {
+        while (historyList.childElementCount > 30) {
           historyList.lastElementChild.remove();
         }
+      }
+
+      function renderObjectFilters() {
+        objectFilterChips.innerHTML = "";
+        if (!activeClasses.length) {
+          const hint = document.createElement("div");
+          hint.style.fontSize = "0.7rem";
+          hint.style.color = "var(--text-muted)";
+          hint.textContent = "No filters → all COCO classes.";
+          objectFilterChips.appendChild(hint);
+          return;
+        }
+        activeClasses.forEach((name) => {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.textContent = name;
+          const close = document.createElement("button");
+          close.type = "button";
+          close.textContent = "×";
+          close.style.marginLeft = "0.25rem";
+          close.style.border = "none";
+          close.style.background = "transparent";
+          close.style.color = "inherit";
+          close.style.cursor = "pointer";
+          close.style.fontSize = "0.7rem";
+          close.addEventListener("click", () => {
+            activeClasses = activeClasses.filter((c) => c !== name);
+            renderObjectFilters();
+            logClient(
+              "object_filter_remove",
+              "DEBUG",
+              "Removed object filter",
+              { value: name, filters: activeClasses }
+              );
+          });
+          chip.appendChild(close);
+          objectFilterChips.appendChild(chip);
+        });
+      }
+
+      function addObjectFilterFromInput() {
+        const raw = objectFilterInput.value.trim().toLowerCase();
+        if (!raw) return;
+        objectFilterInput.value = "";
+        raw.split(",").forEach((piece) => {
+          const p = piece.trim();
+          if (!p) return;
+          if (!activeClasses.includes(p)) {
+            activeClasses.push(p);
+            logClient(
+              "object_filter_add",
+              "DEBUG",
+              "Added object filter",
+              { value: p, filters: activeClasses }
+              );
+          }
+        });
+        renderObjectFilters();
       }
 
       function setModeCamera() {
@@ -703,14 +891,15 @@
         still.style.display = "none";
         preview.style.display = "block";
 
-        const isSecure = window.isSecureContext ||
+        const isSecure =
+        window.isSecureContext ||
         location.hostname === "localhost" ||
         location.hostname === "127.0.0.1";
 
         if (!isSecure) {
           preview.srcObject = null;
-          setStatus("warn", "Open via http://localhost:5000 for camera");
-          playbackStatus.textContent = "Camera blocked by browser (not localhost/https)";
+          setStatus("warn", "Open via https or localhost for camera");
+          playbackStatus.textContent = "Camera blocked (requires https/localhost)";
           logClient(
             "camera_insecure_origin",
             "WARN",
@@ -736,7 +925,8 @@
         logClient("camera_mode_click", "DEBUG", "Camera mode selected", {});
 
         if (!mediaStream) {
-          navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          navigator.mediaDevices
+          .getUserMedia({ video: true, audio: false })
           .then((stream) => {
             mediaStream = stream;
             preview.srcObject = stream;
@@ -759,7 +949,12 @@
           preview.srcObject = mediaStream;
           setStatus("ok", "Camera ready");
           playbackStatus.textContent = "Camera live";
-          logClient("camera_stream_reuse", "DEBUG", "Reusing existing camera stream", {});
+          logClient(
+            "camera_stream_reuse",
+            "DEBUG",
+            "Reusing existing camera stream",
+            {}
+            );
         }
       }
 
@@ -771,6 +966,7 @@
         still.style.display = "none";
         preview.style.display = "block";
         setStatus("ok", "Video mode");
+        playbackStatus.textContent = "No video loaded";
         logClient("video_mode_click", "DEBUG", "Video mode selected", {});
       }
 
@@ -789,13 +985,21 @@
       function handleVideoFileChange() {
         const file = videoFileInput.files && videoFileInput.files[0];
         if (!file) {
-          logClient("video_file_change_empty", "DEBUG", "Video file change with no file", {});
+          logClient(
+            "video_file_change_empty",
+            "DEBUG",
+            "Video file change with no file",
+            {}
+            );
           return;
         }
         const url = URL.createObjectURL(file);
         preview.srcObject = null;
         preview.src = url;
-        preview.play().catch((err) => {
+        preview.playbackRate = settings.videoSpeed;
+        preview
+        .play()
+        .catch((err) => {
           logClient(
             "video_play_error",
             "ERROR",
@@ -805,20 +1009,35 @@
         });
         playbackStatus.textContent = "Video: " + (file.name || "loaded");
         setStatus("ok", "Video loaded");
-        logClient("video_file_loaded", "INFO", "Video file loaded", { name: file.name });
+        logClient(
+          "video_file_loaded",
+          "INFO",
+          "Video file loaded",
+          { name: file.name }
+          );
       }
 
       function handleImageFileChange() {
         const file = imageInput.files && imageInput.files[0];
         if (!file) {
-          logClient("image_file_change_empty", "DEBUG", "Image file change with no file", {});
+          logClient(
+            "image_file_change_empty",
+            "DEBUG",
+            "Image file change with no file",
+            {}
+            );
           return;
         }
         const url = URL.createObjectURL(file);
         still.src = url;
         setStatus("ok", "Image loaded");
         playbackStatus.textContent = "Single frame: " + (file.name || "loaded");
-        logClient("image_file_loaded", "INFO", "Image file loaded", { name: file.name });
+        logClient(
+          "image_file_loaded",
+          "INFO",
+          "Image file loaded",
+          { name: file.name }
+          );
         analyzeSingleImage(file);
       }
 
@@ -836,7 +1055,12 @@
         ctx.drawImage(preview, 0, 0, w, h);
         canvas.toBlob((blob) => {
           if (!blob) {
-            logClient("capture_blob_null", "WARN", "canvas.toBlob returned null", {});
+            logClient(
+              "capture_blob_null",
+              "WARN",
+              "canvas.toBlob returned null",
+              {}
+              );
             return;
           }
           sendFrameForAnalysis(blob, "stream");
@@ -848,13 +1072,18 @@
         form.append("image", blob, "frame.jpg");
         form.append("score_threshold", String(settings.scoreThreshold));
         form.append("enable_tracking", settings.showTrajectories ? "1" : "0");
+        form.append("classes", activeClasses.join(","));
+        if (!currentSessionId) {
+          currentSessionId = "sess-" + Date.now().toString(36);
+        }
+        form.append("session_id", currentSessionId);
 
         requestInFlight = true;
         const t0 = performance.now();
 
         fetch("/analyze_frame", {
           method: "POST",
-          body: form
+          body: form,
         })
         .then((res) => {
           if (!res.ok) {
@@ -873,16 +1102,11 @@
           if (data && data.summary) {
             updateSummary(data.summary);
             setStatus("ok", "Analyzing");
-            logClient(
-              "analyze_ok",
-              "DEBUG",
-              "Analysis response received",
-              {
-                source: sourceKind,
-                elapsed_ms: (t1 - t0).toFixed(1),
-                people: data.summary.people_count,
-              }
-              );
+            logClient("analyze_ok", "DEBUG", "Analysis response received", {
+              source: sourceKind,
+              elapsed_ms: (t1 - t0).toFixed(1),
+              people: data.summary.people_count,
+            });
           }
         })
         .catch((err) => {
@@ -903,12 +1127,18 @@
         form.append("image", file);
         form.append("score_threshold", String(settings.scoreThreshold));
         form.append("enable_tracking", settings.showTrajectories ? "1" : "0");
+        form.append("classes", activeClasses.join(","));
+        if (!currentSessionId) {
+          currentSessionId = "sess-" + Date.now().toString(36);
+        }
+        form.append("session_id", currentSessionId);
+
         requestInFlight = true;
         const t0 = performance.now();
 
         fetch("/analyze_frame", {
           method: "POST",
-          body: form
+          body: form,
         })
         .then((res) => {
           if (!res.ok) {
@@ -943,7 +1173,7 @@
             "analyze_image_fetch_error",
             "ERROR",
             "Fetch to /analyze_frame failed for single frame",
-            { name: err && err.name, message: err && err.message }
+            { name: err && err.message, message: err && err.message }
             );
         })
         .finally(() => {
@@ -964,27 +1194,45 @@
           } else {
             setStatus("ok", "Image mode");
           }
-          logClient("analysis_stop", "INFO", "Analysis stopped", {});
+          logClient("analysis_stop", "INFO", "Analysis stopped", {
+            session_id: currentSessionId,
+          });
         } else {
+          currentSessionId = "sess-" + Date.now().toString(36);
           analyzing = true;
           analysisBtn.textContent = "Stop analysis";
           fpsIndicator.textContent = "Streaming frames to model…";
           startAnalysisTimer();
           setStatus("ok", "Analyzing");
-          logClient("analysis_start", "INFO", "Analysis started", { mode: currentMode });
+          logClient("analysis_start", "INFO", "Analysis started", {
+            mode: currentMode,
+            session_id: currentSessionId,
+          });
         }
       }
 
       function takeSnapshot() {
         const visual = getActiveVisualElement();
         if (!visual) {
-          logClient("snapshot_no_visual", "WARN", "Snapshot requested with no visual", {});
+          logClient(
+            "snapshot_no_visual",
+            "WARN",
+            "Snapshot requested with no visual",
+            {}
+            );
           return;
         }
-        const w = visual.videoWidth || visual.naturalWidth || visual.clientWidth;
-        const h = visual.videoHeight || visual.naturalHeight || visual.clientHeight;
+        const w =
+        visual.videoWidth || visual.naturalWidth || visual.clientWidth;
+        const h =
+        visual.videoHeight || visual.naturalHeight || visual.clientHeight;
         if (!w || !h) {
-          logClient("snapshot_invalid_dims", "WARN", "Snapshot visual has no size", {});
+          logClient(
+            "snapshot_invalid_dims",
+            "WARN",
+            "Snapshot visual has no size",
+            {}
+            );
           return;
         }
 
@@ -993,7 +1241,12 @@
         ctx.drawImage(visual, 0, 0, w, h);
         canvas.toBlob((blob) => {
           if (!blob) {
-            logClient("snapshot_blob_null", "WARN", "Snapshot canvas.toBlob returned null", {});
+            logClient(
+              "snapshot_blob_null",
+              "WARN",
+              "Snapshot canvas.toBlob returned null",
+              {}
+              );
             return;
           }
           sendFrameForAnalysis(blob, "snapshot");
@@ -1005,6 +1258,7 @@
           logClient("play_no_media", "DEBUG", "Play clicked without media", {});
           return;
         }
+        preview.playbackRate = settings.videoSpeed;
         preview.play().catch((err) => {
           logClient(
             "play_error",
@@ -1022,6 +1276,7 @@
         }
       }
 
+      // Settings listeners
       scoreThresholdInput.addEventListener("input", () => {
         const v = parseFloat(scoreThresholdInput.value);
         if (!isNaN(v)) {
@@ -1045,6 +1300,66 @@
           );
       });
 
+      showBoxesInput.addEventListener("change", () => {
+        settings.showBoxes = showBoxesInput.checked;
+        logClient(
+          "setting_show_boxes",
+          "DEBUG",
+          "Box visibility toggled",
+          { value: settings.showBoxes }
+          );
+      });
+
+      showHeatmapInput.addEventListener("change", () => {
+        settings.showHeatmap = showHeatmapInput.checked;
+        logClient(
+          "setting_show_heatmap",
+          "DEBUG",
+          "Heatmap visibility toggled",
+          { value: settings.showHeatmap }
+          );
+      });
+
+      analysisFpsInput.addEventListener("input", () => {
+        const v = parseFloat(analysisFpsInput.value);
+        if (!isNaN(v) && v > 0) {
+          settings.analysisFps = v;
+          logClient(
+            "setting_analysis_fps",
+            "DEBUG",
+            "Analysis FPS changed",
+            { value: v }
+            );
+          if (analyzing) {
+            stopAnalysisTimer();
+            startAnalysisTimer();
+          }
+        }
+      });
+
+      videoSpeedInput.addEventListener("input", () => {
+        const v = parseFloat(videoSpeedInput.value);
+        if (!isNaN(v) && v > 0) {
+          settings.videoSpeed = v;
+          preview.playbackRate = v;
+          logClient(
+            "setting_video_speed",
+            "DEBUG",
+            "Video playback speed changed",
+            { value: v }
+            );
+        }
+      });
+
+      objectFilterAddBtn.addEventListener("click", addObjectFilterFromInput);
+      objectFilterInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          addObjectFilterFromInput();
+        }
+      });
+
+      // Mode + control listeners
       modeCameraBtn.addEventListener("click", setModeCamera);
       modeVideoBtn.addEventListener("click", setModeVideo);
       modeImageBtn.addEventListener("click", setModeImage);
@@ -1061,6 +1376,7 @@
         hostname: location.hostname,
         secure: window.isSecureContext,
       });
+      renderObjectFilters();
       setModeCamera();
     })();
   </script>
