@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>vision-in-store POC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    :root {
+      --bg: #050816;
+      --bg-elevated: #0b1020;
+      --accent: #22c55e;
+      --accent-soft: rgba(34, 197, 94, 0.16);
+      --border: #262b3a;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --danger: #f97316;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top left, #1f2937 0, #020617 45%);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 0.75rem 1.5rem;
+      background: rgba(5, 8, 22, 0.95);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 0.95rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      opacity: 0.9;
+    }
+
+    header h1 span {
+      opacity: 0.5;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .content {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .video-wrapper {
+      flex: 2;
+      display: flex;
+      flex-direction: column;
+      padding: 1rem 1.25rem 1.25rem;
+      gap: 0.6rem;
+    }
+
+    .video-shell {
+      position: relative;
+      width: 100%;
+      flex: 1;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: radial-gradient(circle at top, #020617 0, #020617 45%, #020617 100%);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .video-shell video,
+    .video-shell img {
+      max-width: 100%;
+      max-height: 100%;
+      display: block;
+      border-radius: 12px;
+      background: #000;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .controls {
+      display: inline-flex;
+      padding: 0.25rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.85);
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.6), 0 20px 40px rgba(15, 23, 42, 0.5);
+      gap: 0.15rem;
+    }
+
+    .controls button {
+      padding: 0.25rem 0.85rem;
+      border-radius: 999px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .controls button.is-active {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .analysis-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .chip {
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .chip-dot {
+      width: 0.4rem;
+      height: 0.4rem;
+      border-radius: 999px;
+      background: #4b5563;
+    }
+
+    .chip-dot.is-ok {
+      background: var(--accent);
+    }
+
+    .chip-dot.is-warn {
+      background: var(--danger);
+    }
+
+    .primary-button {
+      padding: 0.3rem 0.9rem;
+      border-radius: 999px;
+      border: none;
+      font-size: 0.75rem;
+      cursor: pointer;
+      background: var(--accent);
+      color: #022c22;
+      font-weight: 600;
+    }
+
+    .primary-button.is-secondary {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid rgba(148, 163, 184, 0.4);
+    }
+
+    .file-input-row {
+      display: none;
+      gap: 0.5rem;
+      width: 100%;
+      justify-content: flex-start;
+      align-items: center;
+    }
+
+    .file-input-row label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      min-width: 5rem;
+    }
+
+    .file-input-row input[type="file"] {
+      font-size: 0.75rem;
+      color: var(--text-main);
+    }
+
+    .playback {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      gap: 0.5rem;
+      margin-top: 0.35rem;
+    }
+
+    .playback-left {
+      display: flex;
+      gap: 0.35rem;
+      align-items: center;
+    }
+
+    .playback button {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      background: rgba(15, 23, 42, 0.8);
+      color: var(--text-main);
+      padding: 0.15rem 0.55rem;
+      font-size: 0.7rem;
+      cursor: pointer;
+    }
+
+    .sidebar {
+      flex: 1;
+      padding: 1rem 1.25rem 1.25rem 0.25rem;
+      box-sizing: border-box;
+      border-left: 1px solid var(--border);
+      background: radial-gradient(circle at top right, #020617 0, #020617 40%, #020617 100%);
+    }
+
+    .panel {
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      padding: 0.75rem 0.9rem;
+      background: rgba(15, 23, 42, 0.85);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.7);
+      margin-bottom: 0.75rem;
+    }
+
+    .panel h2 {
+      margin: 0 0 0.4rem;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+    }
+
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.35rem;
+      font-size: 0.8rem;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+    }
+
+    .stat-value {
+      font-weight: 600;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.4rem;
+      font-size: 0.78rem;
+    }
+
+    .settings-row span {
+      color: var(--text-muted);
+    }
+
+    .settings-row input[type="range"] {
+      width: 120px;
+    }
+
+    .settings-row input[type="checkbox"] {
+      transform: scale(0.9);
+    }
+
+    .history {
+      max-height: 6rem;
+      overflow: auto;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      border-radius: 8px;
+      border: 1px solid rgba(31, 41, 55, 0.8);
+      padding: 0.4rem 0.5rem;
+      background: rgba(15, 23, 42, 0.65);
+      margin-bottom: 0.4rem;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.2rem;
+    }
+
+    .debug-log {
+      max-height: 4rem;
+      overflow: auto;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      border-radius: 8px;
+      border: 1px dashed rgba(148, 163, 184, 0.7);
+      padding: 0.3rem 0.4rem;
+      background: rgba(15, 23, 42, 0.6);
+    }
+
+    .debug-entry {
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+
+    footer {
+      padding: 0.5rem 1.5rem 0.7rem;
+      font-size: 0.74rem;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      background: rgba(5, 8, 22, 0.96);
+    }
+
+    @media (max-width: 900px) {
+      .content {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        border-left: none;
+        border-top: 1px solid var(--border);
+        padding: 0.75rem 1.25rem 1.25rem;
+      }
+
+      .video-wrapper {
+        padding: 0.75rem 1.25rem 0.75rem;
+      }
+
+      .video-shell {
+        max-height: 55vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>VISION-IN-STORE <span>• LIVE ANALYTICS</span></h1>
+    <span class="chip">
+      <span class="chip-dot" id="status-dot"></span>
+      <span id="status-text">Idle</span>
+    </span>
+  </header>
+  <main>
+    <div class="content">
+      <div class="video-wrapper">
+        <!-- MAIN VIDEO STREAM + MODE CONTROLS -->
+        <div class="toolbar">
+          <div class="controls">
+            <button type="button" id="mode-camera" class="is-active">Camera</button>
+            <button type="button" id="mode-video">Video</button>
+            <button type="button" id="mode-image">Frame</button>
+          </div>
+          <div class="analysis-controls">
+            <button type="button" id="btn-analysis" class="primary-button">Start analysis</button>
+            <button type="button" id="btn-snapshot" class="primary-button is-secondary">Snapshot</button>
+          </div>
+        </div>
+
+        <div class="file-input-row" id="video-row">
+          <label for="video-file">Video source</label>
+          <input type="file" id="video-file" accept="video/*">
+        </div>
+        <div class="file-input-row" id="image-row">
+          <label for="image-input">Single frame</label>
+          <input type="file" id="image-input" accept="image/*">
+        </div>
+
+        <div class="video-shell" id="video-shell">
+          <video id="preview" autoplay muted playsinline></video>
+          <img id="still" alt="Still frame" style="display:none;">
+        </div>
+
+        <div class="playback">
+          <div class="playback-left">
+            <button type="button" id="btn-play">Play</button>
+            <button type="button" id="btn-pause">Pause</button>
+            <span id="playback-status">No media loaded</span>
+          </div>
+          <span id="fps-indicator">~1 fps analysis</span>
+        </div>
+      </div>
+
+      <aside class="sidebar">
+        <div class="panel">
+          <h2>Live Summary</h2>
+          <div class="stat">
+            <span class="stat-label">People in frame</span>
+            <span class="stat-value" id="people-count">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Tracked persons</span>
+            <span class="stat-value" id="tracked-count">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Baskets detected</span>
+            <span class="stat-value" id="basket-count">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Age estimates</span>
+            <span class="stat-value" id="age-estimates">n/a</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Sex estimates</span>
+            <span class="stat-value" id="sex-estimates">n/a</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Product regions</span>
+            <span class="stat-value" id="product-regions">n/a</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Detection Settings</h2>
+          <div class="settings-row">
+            <span>Score threshold</span>
+            <input type="range" id="score-threshold" min="0.1" max="0.9" step="0.05" value="0.6">
+          </div>
+          <div class="settings-row">
+            <span>Show trajectories</span>
+            <input type="checkbox" id="show-trajectories" checked>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Recent Frames</h2>
+          <div class="history" id="history-list"></div>
+          <div class="debug-log" id="debug-log"></div>
+        </div>
+      </aside>
+    </div>
+  </main>
+  <footer>
+    Camera mode requires opening this app as <code>http://localhost:5000</code> (or https), not a raw LAN IP.
+  </footer>
+
+  <script>
+    (function () {
+      const peopleEl = document.getElementById("people-count");
+      const trackedEl = document.getElementById("tracked-count");
+      const basketEl = document.getElementById("basket-count");
+      const ageEl = document.getElementById("age-estimates");
+      const sexEl = document.getElementById("sex-estimates");
+      const productEl = document.getElementById("product-regions");
+      const statusDot = document.getElementById("status-dot");
+      const statusText = document.getElementById("status-text");
+      const historyList = document.getElementById("history-list");
+      const playbackStatus = document.getElementById("playback-status");
+      const debugLogEl = document.getElementById("debug-log");
+
+      const modeCameraBtn = document.getElementById("mode-camera");
+      const modeVideoBtn = document.getElementById("mode-video");
+      const modeImageBtn = document.getElementById("mode-image");
+      const analysisBtn = document.getElementById("btn-analysis");
+      const snapshotBtn = document.getElementById("btn-snapshot");
+      const playBtn = document.getElementById("btn-play");
+      const pauseBtn = document.getElementById("btn-pause");
+
+      const videoRow = document.getElementById("video-row");
+      const imageRow = document.getElementById("image-row");
+      const videoFileInput = document.getElementById("video-file");
+      const imageInput = document.getElementById("image-input");
+
+      const preview = document.getElementById("preview");
+      const still = document.getElementById("still");
+      const videoShell = document.getElementById("video-shell");
+      const fpsIndicator = document.getElementById("fps-indicator");
+
+      const scoreThresholdInput = document.getElementById("score-threshold");
+      const showTrajInput = document.getElementById("show-trajectories");
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      const overlayCanvas = document.createElement("canvas");
+      const overlayCtx = overlayCanvas.getContext("2d");
+      overlayCanvas.style.position = "absolute";
+      overlayCanvas.style.pointerEvents = "none";
+      overlayCanvas.style.left = "0";
+      overlayCanvas.style.top = "0";
+      videoShell.appendChild(overlayCanvas);
+
+      let currentMode = "camera";
+      let mediaStream = null;
+      let analyzeInterval = null;
+      let analyzing = false;
+      let requestInFlight = false;
+
+      const settings = {
+        scoreThreshold: parseFloat(scoreThresholdInput.value) || 0.6,
+        showTrajectories: showTrajInput.checked,
+      };
+
+      // Client-side logging helper: logs to console, on-screen panel, and backend /client_event
+      function logClient(event, level, message, extra) {
+        const ts = new Date().toISOString().split("T")[1].replace("Z", "");
+        const payload = { event, level, message, ts, ...(extra || {}) };
+
+        if (level === "ERROR") {
+          console.error("[vision-ui]", payload);
+        } else if (level === "WARN") {
+          console.warn("[vision-ui]", payload);
+        } else {
+          console.log("[vision-ui]", payload);
+        }
+
+        const line = document.createElement("div");
+        line.className = "debug-entry";
+        line.textContent = ts + " • " + event + " • " + message;
+        debugLogEl.prepend(line);
+        while (debugLogEl.childElementCount > 20) {
+          debugLogEl.lastElementChild.remove();
+        }
+
+        fetch("/client_event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event,
+            level,
+            message,
+            ...extra,
+          }),
+        }).catch(() => {});
+      }
+
+      function setStatus(color, text) {
+        statusDot.classList.remove("is-ok", "is-warn");
+        if (color === "ok") {
+          statusDot.classList.add("is-ok");
+        } else if (color === "warn") {
+          statusDot.classList.add("is-warn");
+        }
+        statusText.textContent = text;
+      }
+
+      function setModeButtons(active) {
+        [modeCameraBtn, modeVideoBtn, modeImageBtn].forEach((btn) => {
+          if (btn.id === active) {
+            btn.classList.add("is-active");
+          } else {
+            btn.classList.remove("is-active");
+          }
+        });
+      }
+
+      function stopAnalysisTimer() {
+        if (analyzeInterval !== null) {
+          clearInterval(analyzeInterval);
+          analyzeInterval = null;
+          logClient("analysis_timer_stop", "DEBUG", "Stopped analysis timer", {});
+        }
+      }
+
+      function startAnalysisTimer() {
+        if (analyzeInterval !== null) {
+          return;
+        }
+        analyzeInterval = setInterval(captureAndAnalyze, 1000);
+        logClient("analysis_timer_start", "DEBUG", "Started analysis timer @1fps", {});
+      }
+
+      function getActiveVisualElement() {
+        if (currentMode === "image") {
+          return still;
+        }
+        return preview;
+      }
+
+      function updateSummary(summary) {
+        if (!summary) return;
+        peopleEl.textContent = summary.people_count ?? 0;
+        basketEl.textContent = summary.basket_count ?? 0;
+
+        if (Array.isArray(summary.age_estimates) && summary.age_estimates.length > 0) {
+          ageEl.textContent = summary.age_estimates.join(", ");
+        } else {
+          ageEl.textContent = "n/a";
+        }
+
+        if (Array.isArray(summary.sex_estimates) && summary.sex_estimates.length > 0) {
+          sexEl.textContent = summary.sex_estimates.join(", ");
+        } else {
+          sexEl.textContent = "n/a";
+        }
+
+        if (Array.isArray(summary.product_regions) && summary.product_regions.length > 0) {
+          productEl.textContent = summary.product_regions.length + " region(s)";
+        } else {
+          productEl.textContent = "n/a";
+        }
+
+        const detections = Array.isArray(summary.detections) ? summary.detections : [];
+        const tracks = Array.isArray(summary.tracks) ? summary.tracks : [];
+        trackedEl.textContent = tracks.length || detections.length || 0;
+        renderDetectionsOverlay(detections, tracks);
+        addHistoryEntry(summary);
+      }
+
+      function renderDetectionsOverlay(detections, tracks) {
+        const visual = getActiveVisualElement();
+        if (!visual) return;
+
+        const visualRect = visual.getBoundingClientRect();
+        const shellRect = videoShell.getBoundingClientRect();
+
+        const cw = visualRect.width || 1;
+        const ch = visualRect.height || 1;
+
+        overlayCanvas.width = cw;
+        overlayCanvas.height = ch;
+        overlayCanvas.style.width = cw + "px";
+        overlayCanvas.style.height = ch + "px";
+        overlayCanvas.style.left = (visualRect.left - shellRect.left) + "px";
+        overlayCanvas.style.top = (visualRect.top - shellRect.top) + "px";
+
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+        const vw = visual.videoWidth || visual.naturalWidth || cw;
+        const vh = visual.videoHeight || visual.naturalHeight || ch;
+        const scaleX = cw / vw;
+        const scaleY = ch / vh;
+
+        overlayCtx.lineWidth = 2;
+        overlayCtx.font = "12px system-ui, -apple-system, sans-serif";
+        overlayCtx.textBaseline = "bottom";
+
+        (detections || []).forEach((d) => {
+          const x = (d.x || 0) * scaleX;
+          const y = (d.y || 0) * scaleY;
+          const w = (d.w || 0) * scaleX;
+          const h = (d.h || 0) * scaleY;
+
+          overlayCtx.strokeStyle = "#22c55e";
+          overlayCtx.strokeRect(x, y, w, h);
+
+          const label = (d.label || "person") + (d.track_id ? " #" + d.track_id : "");
+          const tw = overlayCtx.measureText(label).width + 6;
+          const th = 14;
+          const boxY = y - th < 0 ? y + th : y;
+
+          overlayCtx.fillStyle = "rgba(15,23,42,0.85)";
+          overlayCtx.fillRect(x, boxY - th, tw, th);
+          overlayCtx.fillStyle = "#e5e7eb";
+          overlayCtx.fillText(label, x + 3, boxY - 2);
+        });
+
+        if (settings.showTrajectories && Array.isArray(tracks) && tracks.length > 0) {
+          overlayCtx.lineWidth = 1.5;
+          tracks.forEach((t) => {
+            const pts = t.points || [];
+            if (pts.length < 2) return;
+            overlayCtx.beginPath();
+            pts.forEach((p, idx) => {
+              const px = p.x * scaleX;
+              const py = p.y * scaleY;
+              if (idx === 0) {
+                overlayCtx.moveTo(px, py);
+              } else {
+                overlayCtx.lineTo(px, py);
+              }
+            });
+            overlayCtx.strokeStyle = "rgba(56, 189, 248, 0.9)";
+            overlayCtx.stroke();
+          });
+        }
+      }
+
+      function addHistoryEntry(summary) {
+        const ts = new Date().toLocaleTimeString();
+        const item = document.createElement("div");
+        item.className = "history-item";
+        const people = summary.people_count ?? 0;
+        const tracks = Array.isArray(summary.tracks) ? summary.tracks.length : 0;
+        item.textContent = ts + " • people: " + people + " • tracks: " + tracks;
+        historyList.prepend(item);
+        while (historyList.childElementCount > 20) {
+          historyList.lastElementChild.remove();
+        }
+      }
+
+      function setModeCamera() {
+        currentMode = "camera";
+        setModeButtons("mode-camera");
+        videoRow.style.display = "none";
+        imageRow.style.display = "none";
+        still.style.display = "none";
+        preview.style.display = "block";
+
+        const isSecure = window.isSecureContext ||
+        location.hostname === "localhost" ||
+        location.hostname === "127.0.0.1";
+
+        if (!isSecure) {
+          preview.srcObject = null;
+          setStatus("warn", "Open via http://localhost:5000 for camera");
+          playbackStatus.textContent = "Camera blocked by browser (not localhost/https)";
+          logClient(
+            "camera_insecure_origin",
+            "WARN",
+            "Camera blocked: page not served from localhost/https",
+            { hostname: location.hostname }
+            );
+          return;
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          preview.srcObject = null;
+          setStatus("warn", "Camera unsupported");
+          playbackStatus.textContent = "Camera unsupported in this browser";
+          logClient(
+            "camera_unsupported",
+            "ERROR",
+            "navigator.mediaDevices.getUserMedia is not available",
+            {}
+            );
+          return;
+        }
+
+        logClient("camera_mode_click", "DEBUG", "Camera mode selected", {});
+
+        if (!mediaStream) {
+          navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          .then((stream) => {
+            mediaStream = stream;
+            preview.srcObject = stream;
+            setStatus("ok", "Camera ready");
+            playbackStatus.textContent = "Camera live";
+            logClient("camera_stream_ok", "INFO", "Camera stream started", {});
+          })
+          .catch((err) => {
+            preview.srcObject = null;
+            setStatus("warn", "Camera error");
+            playbackStatus.textContent = "Camera access denied";
+            logClient(
+              "camera_stream_error",
+              "ERROR",
+              "getUserMedia rejected",
+              { name: err && err.name, message: err && err.message }
+              );
+          });
+        } else {
+          preview.srcObject = mediaStream;
+          setStatus("ok", "Camera ready");
+          playbackStatus.textContent = "Camera live";
+          logClient("camera_stream_reuse", "DEBUG", "Reusing existing camera stream", {});
+        }
+      }
+
+      function setModeVideo() {
+        currentMode = "video";
+        setModeButtons("mode-video");
+        videoRow.style.display = "flex";
+        imageRow.style.display = "none";
+        still.style.display = "none";
+        preview.style.display = "block";
+        setStatus("ok", "Video mode");
+        logClient("video_mode_click", "DEBUG", "Video mode selected", {});
+      }
+
+      function setModeImage() {
+        currentMode = "image";
+        setModeButtons("mode-image");
+        videoRow.style.display = "none";
+        imageRow.style.display = "flex";
+        preview.style.display = "none";
+        still.style.display = "block";
+        setStatus("ok", "Image mode");
+        playbackStatus.textContent = "Single frame loaded";
+        logClient("image_mode_click", "DEBUG", "Image mode selected", {});
+      }
+
+      function handleVideoFileChange() {
+        const file = videoFileInput.files && videoFileInput.files[0];
+        if (!file) {
+          logClient("video_file_change_empty", "DEBUG", "Video file change with no file", {});
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        preview.srcObject = null;
+        preview.src = url;
+        preview.play().catch((err) => {
+          logClient(
+            "video_play_error",
+            "ERROR",
+            "Error playing selected video",
+            { name: err && err.name, message: err && err.message }
+            );
+        });
+        playbackStatus.textContent = "Video: " + (file.name || "loaded");
+        setStatus("ok", "Video loaded");
+        logClient("video_file_loaded", "INFO", "Video file loaded", { name: file.name });
+      }
+
+      function handleImageFileChange() {
+        const file = imageInput.files && imageInput.files[0];
+        if (!file) {
+          logClient("image_file_change_empty", "DEBUG", "Image file change with no file", {});
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        still.src = url;
+        setStatus("ok", "Image loaded");
+        playbackStatus.textContent = "Single frame: " + (file.name || "loaded");
+        logClient("image_file_loaded", "INFO", "Image file loaded", { name: file.name });
+        analyzeSingleImage(file);
+      }
+
+      function captureAndAnalyze() {
+        if (!analyzing || requestInFlight) return;
+        if (currentMode !== "camera" && currentMode !== "video") return;
+
+        if (preview.readyState < 2) return;
+        const w = preview.videoWidth || preview.clientWidth;
+        const h = preview.videoHeight || preview.clientHeight;
+        if (!w || !h) return;
+
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(preview, 0, 0, w, h);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            logClient("capture_blob_null", "WARN", "canvas.toBlob returned null", {});
+            return;
+          }
+          sendFrameForAnalysis(blob, "stream");
+        }, "image/jpeg", 0.8);
+      }
+
+      function sendFrameForAnalysis(blob, sourceKind) {
+        const form = new FormData();
+        form.append("image", blob, "frame.jpg");
+        form.append("score_threshold", String(settings.scoreThreshold));
+        form.append("enable_tracking", settings.showTrajectories ? "1" : "0");
+
+        requestInFlight = true;
+        const t0 = performance.now();
+
+        fetch("/analyze_frame", {
+          method: "POST",
+          body: form
+        })
+        .then((res) => {
+          if (!res.ok) {
+            logClient(
+              "analyze_http_error",
+              "ERROR",
+              "Server returned HTTP " + res.status,
+              { status: res.status }
+              );
+            return null;
+          }
+          return res.json();
+        })
+        .then((data) => {
+          const t1 = performance.now();
+          if (data && data.summary) {
+            updateSummary(data.summary);
+            setStatus("ok", "Analyzing");
+            logClient(
+              "analyze_ok",
+              "DEBUG",
+              "Analysis response received",
+              {
+                source: sourceKind,
+                elapsed_ms: (t1 - t0).toFixed(1),
+                people: data.summary.people_count,
+              }
+              );
+          }
+        })
+        .catch((err) => {
+          logClient(
+            "analyze_fetch_error",
+            "ERROR",
+            "Fetch to /analyze_frame failed",
+            { name: err && err.name, message: err && err.message }
+            );
+        })
+        .finally(() => {
+          requestInFlight = false;
+        });
+      }
+
+      function analyzeSingleImage(file) {
+        const form = new FormData();
+        form.append("image", file);
+        form.append("score_threshold", String(settings.scoreThreshold));
+        form.append("enable_tracking", settings.showTrajectories ? "1" : "0");
+        requestInFlight = true;
+        const t0 = performance.now();
+
+        fetch("/analyze_frame", {
+          method: "POST",
+          body: form
+        })
+        .then((res) => {
+          if (!res.ok) {
+            logClient(
+              "analyze_image_http_error",
+              "ERROR",
+              "Server returned HTTP " + res.status + " for single frame",
+              { status: res.status }
+              );
+            return null;
+          }
+          return res.json();
+        })
+        .then((data) => {
+          const t1 = performance.now();
+          if (data && data.summary) {
+            updateSummary(data.summary);
+            setStatus("ok", "Image analyzed");
+            logClient(
+              "analyze_image_ok",
+              "DEBUG",
+              "Single-frame analysis response received",
+              {
+                elapsed_ms: (t1 - t0).toFixed(1),
+                people: data.summary.people_count,
+              }
+              );
+          }
+        })
+        .catch((err) => {
+          logClient(
+            "analyze_image_fetch_error",
+            "ERROR",
+            "Fetch to /analyze_frame failed for single frame",
+            { name: err && err.name, message: err && err.message }
+            );
+        })
+        .finally(() => {
+          requestInFlight = false;
+        });
+      }
+
+      function toggleAnalysis() {
+        if (analyzing) {
+          analyzing = false;
+          stopAnalysisTimer();
+          analysisBtn.textContent = "Start analysis";
+          fpsIndicator.textContent = "~1 fps analysis";
+          if (currentMode === "camera") {
+            setStatus("ok", "Camera ready");
+          } else if (currentMode === "video") {
+            setStatus("ok", "Video loaded");
+          } else {
+            setStatus("ok", "Image mode");
+          }
+          logClient("analysis_stop", "INFO", "Analysis stopped", {});
+        } else {
+          analyzing = true;
+          analysisBtn.textContent = "Stop analysis";
+          fpsIndicator.textContent = "Streaming frames to model…";
+          startAnalysisTimer();
+          setStatus("ok", "Analyzing");
+          logClient("analysis_start", "INFO", "Analysis started", { mode: currentMode });
+        }
+      }
+
+      function takeSnapshot() {
+        const visual = getActiveVisualElement();
+        if (!visual) {
+          logClient("snapshot_no_visual", "WARN", "Snapshot requested with no visual", {});
+          return;
+        }
+        const w = visual.videoWidth || visual.naturalWidth || visual.clientWidth;
+        const h = visual.videoHeight || visual.naturalHeight || visual.clientHeight;
+        if (!w || !h) {
+          logClient("snapshot_invalid_dims", "WARN", "Snapshot visual has no size", {});
+          return;
+        }
+
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(visual, 0, 0, w, h);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            logClient("snapshot_blob_null", "WARN", "Snapshot canvas.toBlob returned null", {});
+            return;
+          }
+          sendFrameForAnalysis(blob, "snapshot");
+        }, "image/jpeg", 0.9);
+      }
+
+      function playMedia() {
+        if (!preview.src && !preview.srcObject) {
+          logClient("play_no_media", "DEBUG", "Play clicked without media", {});
+          return;
+        }
+        preview.play().catch((err) => {
+          logClient(
+            "play_error",
+            "ERROR",
+            "Video play() failed",
+            { name: err && err.name, message: err && err.message }
+            );
+        });
+      }
+
+      function pauseMedia() {
+        if (preview.pause) {
+          preview.pause();
+          logClient("pause_media", "DEBUG", "Pause clicked", {});
+        }
+      }
+
+      scoreThresholdInput.addEventListener("input", () => {
+        const v = parseFloat(scoreThresholdInput.value);
+        if (!isNaN(v)) {
+          settings.scoreThreshold = v;
+          logClient(
+            "setting_score_threshold",
+            "DEBUG",
+            "Score threshold changed",
+            { value: v }
+            );
+        }
+      });
+
+      showTrajInput.addEventListener("change", () => {
+        settings.showTrajectories = showTrajInput.checked;
+        logClient(
+          "setting_show_trajectories",
+          "DEBUG",
+          "Trajectory visibility toggled",
+          { value: settings.showTrajectories }
+          );
+      });
+
+      modeCameraBtn.addEventListener("click", setModeCamera);
+      modeVideoBtn.addEventListener("click", setModeVideo);
+      modeImageBtn.addEventListener("click", setModeImage);
+      analysisBtn.addEventListener("click", toggleAnalysis);
+      snapshotBtn.addEventListener("click", takeSnapshot);
+      videoFileInput.addEventListener("change", handleVideoFileChange);
+      imageInput.addEventListener("change", handleImageFileChange);
+      playBtn.addEventListener("click", playMedia);
+      pauseBtn.addEventListener("click", pauseMedia);
+
+      setStatus("warn", "Idle");
+      playbackStatus.textContent = "No media loaded";
+      logClient("ui_boot", "INFO", "UI initialised", {
+        hostname: location.hostname,
+        secure: window.isSecureContext,
+      });
+      setModeCamera();
+    })();
+  </script>
+</body>
+</html>
