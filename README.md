@@ -1,5 +1,11 @@
 # vision-in-store
 
+
+
+https://github.com/user-attachments/assets/a55442e2-d3c4-4f2d-9214-39ee44d1b39b
+
+
+
 Early proof of concept for a smart retail camera pipeline using Python, OpenCV, TorchVision and Flask.
 
 The goal is to instrument a retail space from one or more cameras: detect people and other COCO objects, track their motion, and expose a clean JSON + web UI surface that can later grow into age/sex estimation and product-level analytics (gaze, pick-up events, shelf occupancy, etc.).
